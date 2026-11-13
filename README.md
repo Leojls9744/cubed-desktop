@@ -6,12 +6,12 @@ Latest installers: `https://github.com/Leojls9744/cubed-desktop/releases/latest`
 
 ## Make a release
 
-```
-git tag v1.0.1
-git push origin v1.0.1
-```
+1. Open the **Actions** tab and pick **Release installers**.
+2. Click **Run workflow**, then the green **Run workflow** button.
 
-The **Release installers** workflow builds the installers on Windows, macOS and Linux and publishes them as a release. The tag sets the app's version number.
+About ten minutes later the installers for Windows, macOS and Linux are on the Releases page. The release is named after `version` in `package.json` (`v1.0.0` for `1.0.0`); raise that number before publishing the next one. Running it again for the same version replaces that release's installers.
+
+Every push to `main` also builds the installers without publishing them, so a broken build shows up straight away. Pushing a tag such as `v1.0.1` publishes too, with the tag as the version number.
 
 The app opens the address in `cubed.url` in `package.json`. Change it there if CUBED moves to a new address.
 

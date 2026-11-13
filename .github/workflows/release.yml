@@ -1,21 +1,34 @@
-# Builds the CUBED installers (Windows, macOS, Linux) and publishes them as a
-# GitHub Release.
+# Builds the CUBED installers (Windows, macOS, Linux).
 #
-# Make a release: push a tag, for example
-#   git tag v1.0.1 && git push origin v1.0.1
-# The tag sets the app's version number. "Run workflow" on the Actions tab
-# builds the installers without publishing a release.
+# Every push to main builds them, so a broken build shows up straight away.
+# Nothing is published by a push.
+#
+# Publish a release: Actions tab > "Release installers" > "Run workflow".
+# The release is named after "version" in package.json (v1.0.0 for 1.0.0).
+# Raise that number before publishing the next one. Pushing a tag such as
+# v1.0.1 also publishes, with the tag as the version number.
 #
 # The app's address comes from "cubed.url" in package.json.
 name: Release installers
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+    paths-ignore: ["**.md"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the installers as a release"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -53,10 +66,22 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      - name: List installers
+        shell: bash
+        run: |
+          {
+            echo "### Installers (${{ matrix.os }})"
+            echo
+            echo '```'
+            ls -l dist/*.exe dist/*.dmg dist/*.AppImage 2>/dev/null | awk '{ printf "%8.1f MB  %s\n", $5 / 1048576, $NF }'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
           if-no-files-found: error
+          retention-days: 14
           path: |
             dist/*.exe
             dist/*.dmg
@@ -66,9 +91,11 @@ jobs:
     name: Publish release
     needs: build
     # Publish whatever built, even if one platform failed.
-    if: ${{ !cancelled() && github.ref_type == 'tag' }}
+    if: ${{ !cancelled() && (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish)) }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: installers
@@ -79,8 +106,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v$(node -p "require('./package.json').version")"
+          fi
           ls -la installers
-          gh release create "$GITHUB_REF_NAME" installers/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "CUBED ${GITHUB_REF_NAME#v}" \
-            --notes "Installers for Windows (.exe), macOS (.dmg: arm64 for Apple Silicon, x64 for Intel) and Linux (.AppImage)."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # The release is already there: refresh its installers.
+            gh release upload "$tag" installers/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" installers/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "CUBED ${tag#v}" \
+              --notes "Installers for Windows (.exe), macOS (.dmg: arm64 for Apple Silicon, x64 for Intel) and Linux (.AppImage)."
+          fi
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
