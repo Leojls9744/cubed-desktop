@@ -11,6 +11,8 @@ Latest installers: `https://github.com/Leojls9744/cubed-desktop/releases/latest`
 
 About ten minutes later the installers for Windows, macOS and Linux are on the Releases page. The release is named after `version` in `package.json` (`v1.0.0` for `1.0.0`); raise that number before publishing the next one. Running it again for the same version replaces that release's installers.
 
+If a release comes out without the Mac `.dmg` files, GitHub had no Mac build machine free. Open that run under **Actions** and click **Re-run failed jobs**; the Mac installers are added to the same release.
+
 Every push to `main` also builds the installers without publishing them, so a broken build shows up straight away. Pushing a tag such as `v1.0.1` publishes too, with the tag as the version number.
 
 The app opens the address in `cubed.url` in `package.json`. Change it there if CUBED moves to a new address.

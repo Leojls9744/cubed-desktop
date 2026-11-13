@@ -36,11 +36,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-15-intel: GitHub's Apple Silicon runners are short on capacity
-        # and jobs time out waiting for one. The Intel runner builds both the
-        # arm64 and x64 .dmg files.
-        os: [windows-latest, macos-15-intel, ubuntu-latest]
+        # Two Mac runners build the same two .dmg files (arm64 and x64).
+        # GitHub is often short of Mac machines and a job can wait 15 minutes
+        # and give up; with two kinds asked for, one usually gets through.
+        os: [windows-latest, macos-15-intel, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    # A Mac runner that never arrives must not fail the whole run.
+    continue-on-error: ${{ startsWith(matrix.os, 'macos') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -119,6 +121,13 @@ jobs:
             tag="v$(node -p "require('./package.json').version")"
           fi
           ls -la installers
+          # Say so clearly when a platform is missing (usually: no Mac runner).
+          for want in .exe .dmg .AppImage; do
+            if ! ls installers/*"$want" >/dev/null 2>&1; then
+              echo "::warning::No $want installer was built. Open this run and choose 'Re-run failed jobs' to add it to the release."
+              echo "**Missing: $want installer.** Choose *Re-run failed jobs* on this run to add it." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # The release is already there: refresh its installers.
             gh release upload "$tag" installers/* --repo "$GITHUB_REPOSITORY" --clobber
