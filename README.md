@@ -24,6 +24,12 @@ The app opens the address in `cubed.url` in `package.json`. Change it there if C
 - Files opened from the OS save back to the same file with Ctrl+S.
 - Works offline after the first launch.
 
+## Updates
+
+- **Windows and Linux** update themselves (from version 1.0.2 on). The app checks this repo's latest release when it starts and every six hours, downloads a newer version in the background and installs it when the app quits. It reads `latest.yml` / `latest-linux.yml` from the release, so those files must stay in every release (the workflow uploads them).
+- **Mac** cannot update itself without a paid Apple signing certificate. The app checks the latest release instead and shows a "new version available" button that downloads the new `.dmg`.
+- Versions 1.0.0 and 1.0.1 have no updater: those users install 1.0.2 or later once by hand (the app shows them the same button).
+
 ## Signing in
 
 Passkeys and Google sign-in do not work inside an app window, so **Sign in** opens a small browser window (Chrome, Edge or Brave if installed, otherwise a tab in the default browser). Sign in there with Internet Identity and the window closes; the app is signed in.

@@ -5,7 +5,10 @@
 // - After the first launch the app works offline (it caches itself).
 // - Sign-in happens in the user's real browser (passkeys and Google sign-in do
 //   not work inside an app window): see "Sign in through the browser" below.
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+// - Windows and Linux update themselves from this repo's GitHub releases. Macs
+//   cannot (that needs a paid Apple certificate), so there the app is told when
+//   a newer installer exists and shows a button: see "Updates" below.
+const { app, BrowserWindow, ipcMain, net, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { existsSync } = require("node:fs");
@@ -105,6 +108,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     pending.push(...filesIn(process.argv.slice(1)));
     createWindow();
+    watchForUpdates();
     app.on("activate", () => {
       if (!win) createWindow();
     });
@@ -130,6 +134,82 @@ ipcMain.handle("save-file", async (event, file, bytes) => {
   if (!fromApp(event)) throw new Error("Not allowed.");
   if (!writable.has(file)) throw new Error("CUBED can only save files it opened.");
   await fs.writeFile(file, Buffer.from(bytes));
+});
+
+// ---- Updates ----------------------------------------------------------------
+// What the app can show: null (up to date), { state: "ready", version } once a
+// Windows or Linux update is downloaded (it installs when the app quits, or at
+// once on "Restart to update"), or { state: "available", version, url } on a
+// Mac, where the user downloads the new installer.
+// "owner/repo" on GitHub. (The "build" section of package.json is not in the
+// installed app, so this lives beside the app's address.)
+const RELEASES = require("./package.json").cubed.releases;
+const SIX_HOURS = 6 * 60 * 60 * 1000;
+let update = null;
+
+/** Is version `a` newer than `b`? Compares 1.2.3-style numbers. */
+function newer(a, b) {
+  const parts = (v) => String(v).replace(/^v/, "").split(/[.-]/).map((n) => Number.parseInt(n, 10) || 0);
+  const [left, right] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) {
+    if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) > (right[i] || 0);
+  }
+  return false;
+}
+
+/** Mac: ask GitHub for the latest release and remember its installer. */
+async function checkMacRelease(fetchJson) {
+  try {
+    const release = await fetchJson(`https://api.github.com/repos/${RELEASES}/releases/latest`);
+    const version = String(release.tag_name || "").replace(/^v/, "");
+    const file = `CUBED-mac-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`;
+    const installer = (release.assets || []).find((asset) => asset.name === file);
+    if (installer && newer(version, app.getVersion())) {
+      update = { state: "available", version, url: installer.browser_download_url };
+    }
+  } catch (error) {
+    console.error("Update check failed:", error.message);
+  }
+  return update;
+}
+
+function watchForUpdates() {
+  if (!app.isPackaged) return;
+  if (process.platform === "darwin") {
+    const fetchJson = async (url) => {
+      const reply = await net.fetch(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "CUBED-desktop" } });
+      if (!reply.ok) throw new Error(`GitHub answered ${reply.status}`);
+      return reply.json();
+    };
+    const check = () => checkMacRelease(fetchJson);
+    setTimeout(check, 8000);
+    setInterval(check, SIX_HOURS);
+    return;
+  }
+  // Windows and Linux: download in the background, install when the app quits.
+  const { autoUpdater } = require("electron-updater");
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("update-downloaded", (info) => {
+    update = { state: "ready", version: info.version };
+  });
+  autoUpdater.on("error", (error) => console.error("Update failed:", error == null ? "" : error.message));
+  const check = () => autoUpdater.checkForUpdates().catch(() => undefined);
+  setTimeout(check, 8000);
+  setInterval(check, SIX_HOURS);
+}
+
+ipcMain.handle("version", () => app.getVersion());
+ipcMain.handle("update", (event) => (fromApp(event) ? update : null));
+ipcMain.handle("apply-update", (event) => {
+  if (!fromApp(event) || !update) return false;
+  if (update.state === "ready") {
+    // Quit, install and start again.
+    setImmediate(() => require("electron-updater").autoUpdater.quitAndInstall());
+  } else if (update.url && update.url.startsWith("https://github.com/")) {
+    shell.openExternal(update.url);
+  }
+  return true;
 });
 
 // ---- Sign in through the browser -------------------------------------------
@@ -306,3 +386,6 @@ ipcMain.handle("sign-in", (event, publicKey) => {
     });
   });
 });
+
+// For tests.
+module.exports = { newer, checkMacRelease };

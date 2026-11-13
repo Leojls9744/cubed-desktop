@@ -1,13 +1,14 @@
 {
   "name": "cubed-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CUBED desktop app",
   "author": "CUBED",
   "license": "UNLICENSED",
   "private": true,
   "main": "main.js",
   "cubed": {
-    "url": "https://cubed-9du.caffeine.xyz"
+    "url": "https://cubed-9du.caffeine.xyz",
+    "releases": "Leojls9744/cubed-desktop"
   },
   "scripts": {
     "start": "electron .",
@@ -171,6 +172,16 @@
       ]
     },
     "artifactName": "CUBED-${os}-${arch}.${ext}",
-    "afterPack": "build/after-pack.js"
+    "afterPack": "build/after-pack.js",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Leojls9744",
+        "repo": "cubed-desktop"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   }
 }

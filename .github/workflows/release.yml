@@ -91,10 +91,14 @@ jobs:
           name: installers-${{ matrix.os }}
           if-no-files-found: error
           retention-days: 14
+          # latest*.yml and the .blockmap files are what installed copies
+          # read to update themselves (Windows and Linux).
           path: |
             dist/*.exe
             dist/*.dmg
             dist/*.AppImage
+            dist/*.blockmap
+            dist/latest*.yml
 
   release:
     name: Publish release
