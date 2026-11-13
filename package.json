@@ -1,0 +1,163 @@
+{
+  "name": "cubed-desktop",
+  "version": "1.0.0",
+  "description": "CUBED desktop app",
+  "author": "CUBED",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "cubed": {
+    "url": ""
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "release": "electron-builder --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.cubed.desktop",
+    "productName": "CUBED",
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "CUBED Document",
+        "role": "Editor"
+      },
+      {
+        "ext": "txt",
+        "name": "CUBED Document",
+        "role": "Editor"
+      },
+      {
+        "ext": "md",
+        "name": "CUBED Document",
+        "role": "Editor"
+      },
+      {
+        "ext": "xlsx",
+        "name": "CUBED Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": "csv",
+        "name": "CUBED Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": "tsv",
+        "name": "CUBED Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": "xls",
+        "name": "CUBED Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": "ods",
+        "name": "CUBED Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": "pptx",
+        "name": "CUBED Presentation",
+        "role": "Editor"
+      },
+      {
+        "ext": "pdf",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "tif",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "tiff",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "png",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "jpg",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "jpeg",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "webp",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "gif",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      },
+      {
+        "ext": "bmp",
+        "name": "CUBED PDF or Image",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "CUBED"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "mimeTypes": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/csv",
+        "application/pdf",
+        "image/tiff",
+        "image/png",
+        "image/jpeg"
+      ]
+    },
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
+  }
+}

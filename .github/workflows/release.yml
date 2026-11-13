@@ -1,0 +1,41 @@
+# Builds the CUBED installers and attaches them to a GitHub Release.
+# Run it by pushing a tag (git tag v1.0.0 && git push --tags) or from the Actions tab.
+# Requires the repository variable CUBED_URL = the live address of the CUBED app.
+name: Release installers
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Point the app at the live CUBED address
+        shell: bash
+        run: |
+          if [ -z "${{ vars.CUBED_URL }}" ]; then
+            echo "Set the repository variable CUBED_URL (Settings > Secrets and variables > Actions > Variables)." >&2
+            exit 1
+          fi
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.cubed.url=process.env.CUBED_URL;fs.writeFileSync('package.json',JSON.stringify(p,null,2))"
+        env:
+          CUBED_URL: ${{ vars.CUBED_URL }}
+      - run: npm install
+      - name: Build and publish
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
