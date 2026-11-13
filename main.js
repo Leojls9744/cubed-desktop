@@ -29,8 +29,17 @@ const pending = [];
 // Only files the user opened through the OS in this session may be written.
 const writable = new Set();
 
+// Other apps open CUBED with a cubed:// link (cubed://open). A link only
+// starts CUBED or brings its window to the front. Nothing else in the address
+// is read, and a launch that carries a link never opens a file, whatever the
+// address or the rest of the command line says.
+const LINK = "cubed";
+const isLink = (arg) => /^cubed:/i.test(String(arg));
+
 const filesIn = (argv) =>
-  argv.filter((arg) => !arg.startsWith("-") && EXTENSIONS.has(path.extname(arg).slice(1).toLowerCase()));
+  argv.some(isLink)
+    ? []
+    : argv.filter((arg) => !arg.startsWith("-") && EXTENSIONS.has(path.extname(arg).slice(1).toLowerCase()));
 
 async function deliver(file) {
   try {
@@ -44,6 +53,17 @@ async function deliver(file) {
 function open(file) {
   if (win && rendererReady) deliver(file);
   else pending.push(file);
+}
+
+/** Bring CUBED to the front, making its window again if it was closed. */
+function showWindow() {
+  if (!win) {
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
 
 function createWindow() {
@@ -92,18 +112,29 @@ function createWindow() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // A second launch (double-clicking another file) reuses the running app.
+  // Tell the system that cubed:// links belong to this app. Run from source
+  // (npm start), the link has to name the script as well as Electron.
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) app.setAsDefaultProtocolClient(LINK, process.execPath, [path.resolve(process.argv[1])]);
+  } else {
+    app.setAsDefaultProtocolClient(LINK);
+  }
+  // A second launch (double-clicking another file, or a cubed:// link on
+  // Windows and Linux) reuses the running app.
   app.on("second-instance", (_event, argv) => {
     for (const file of filesIn(argv.slice(1))) open(file);
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
+    showWindow();
   });
   // macOS delivers opened files through this event.
   app.on("open-file", (event, file) => {
     event.preventDefault();
+    if (isLink(file)) return showWindow();
     open(file);
+  });
+  // macOS delivers a cubed:// link through this one. The address is not read.
+  app.on("open-url", (event) => {
+    event.preventDefault();
+    showWindow();
   });
   app.whenReady().then(() => {
     pending.push(...filesIn(process.argv.slice(1)));
@@ -392,4 +423,4 @@ ipcMain.handle("sign-in", (event, publicKey) => {
 });
 
 // For tests.
-module.exports = { newer, checkMacRelease };
+module.exports = { newer, checkMacRelease, filesIn, isLink };

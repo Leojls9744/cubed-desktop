@@ -1,6 +1,6 @@
 {
   "name": "cubed-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "CUBED desktop app",
   "author": "CUBED",
   "license": "UNLICENSED",
@@ -120,6 +120,14 @@
         "ext": "bmp",
         "name": "CUBED PDF or Image",
         "role": "Editor"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "CUBED",
+        "schemes": [
+          "cubed"
+        ]
       }
     ],
     "win": {

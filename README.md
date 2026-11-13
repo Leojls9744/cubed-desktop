@@ -30,6 +30,12 @@ The app opens the address in `cubed.url` in `package.json`. Change it there if C
 - **Mac** cannot update itself without a paid Apple signing certificate. The app checks the latest release instead and shows a "new version available" button that downloads the new `.dmg`.
 - Versions 1.0.0 and 1.0.1 have no updater: those users install 1.0.2 or later once by hand (the app shows them the same button).
 
+## Opening CUBED from another app
+
+Other apps open the desktop app with the link `cubed://open`. It starts CUBED, or brings the open window to the front. Nothing else in the address is read, and a link never opens a file.
+
+The installers register the link (`protocols` in `package.json`), and the app registers it again each time it starts (`app.setAsDefaultProtocolClient`). On Windows that means the link works after CUBED has been started once. On Linux the AppImage has to be added to the desktop's app list (for example with AppImageLauncher) for links to reach it.
+
 ## Signing in
 
 Passkeys and Google sign-in do not work inside an app window, so **Sign in** opens a small browser window (Chrome, Edge or Brave if installed, otherwise a tab in the default browser). Sign in there with Internet Identity and the window closes; the app is signed in.
