@@ -2,20 +2,18 @@
 
 Native installers for CUBED (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`), built by GitHub Actions and published on this repo's **Releases** page.
 
-## One-time setup
-
-1. Publish CUBED live in Caffeine and copy its address.
-2. In this repo: **Settings > Secrets and variables > Actions > Variables > New variable**
-   `CUBED_URL` = that address (for example `https://cubed.example.com`).
+Latest installers: `https://github.com/Leojls9744/cubed-desktop/releases/latest`
 
 ## Make a release
 
 ```
-git tag v1.0.0
-git push --tags
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-The **Release installers** workflow builds all three installers and attaches them to the release. Put the release link (`https://github.com/<you>/<repo>/releases/latest`) in CUBED > Settings > App setup > Installer download link.
+The **Release installers** workflow builds the installers on Windows, macOS and Linux and publishes them as a release. The tag sets the app's version number.
+
+The app opens the address in `cubed.url` in `package.json`. Change it there if CUBED moves to a new address.
 
 ## What the desktop app adds
 
@@ -26,6 +24,7 @@ The **Release installers** workflow builds all three installers and attaches the
 
 ## Notes
 
-- The installers are not code-signed, so Windows SmartScreen and macOS Gatekeeper show a warning on first run. Signing needs a paid certificate (Windows) or an Apple Developer account (macOS).
+- The installers are not code-signed, so Windows SmartScreen and macOS Gatekeeper ask for confirmation on first run. Signing needs a paid certificate (Windows) or an Apple Developer account (macOS).
+- macOS has two downloads: `arm64` for Apple Silicon Macs and `x64` for Intel Macs.
 - Phones and tablets: open CUBED in the browser and choose **Install app** / **Add to Home Screen**.
 - Run locally: `npm install && CUBED_URL=https://your-app npm start`.

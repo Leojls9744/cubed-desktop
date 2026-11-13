@@ -7,12 +7,11 @@
   "private": true,
   "main": "main.js",
   "cubed": {
-    "url": ""
+    "url": "https://cubed-9du.caffeine.xyz"
   },
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --publish never",
-    "release": "electron-builder --publish always"
+    "dist": "electron-builder --publish never"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -124,7 +123,12 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -134,13 +138,25 @@
     },
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "identity": null
     },
     "linux": {
       "target": [
-        "AppImage"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "category": "Office",
       "mimeTypes": [
@@ -154,10 +170,7 @@
         "image/jpeg"
       ]
     },
-    "publish": [
-      {
-        "provider": "github"
-      }
-    ]
+    "artifactName": "CUBED-${os}-${arch}.${ext}",
+    "afterPack": "build/after-pack.js"
   }
 }
