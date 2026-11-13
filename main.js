@@ -214,9 +214,10 @@ ipcMain.handle("apply-update", (event) => {
 
 // ---- Sign in through the browser -------------------------------------------
 // The app makes a key pair and gives the public half to main. Main opens a
-// small browser window on the CUBED sign-in page and waits on a loopback
-// address (127.0.0.1, this computer only). The page signs in with Internet
-// Identity, extends the session to the app's key, and sends it back here.
+// small browser window on the CUBED sign-in page (the request after the "#")
+// and waits on a loopback address (127.0.0.1, this computer only). The page
+// signs in with Internet Identity, extends the session to the app's key, and
+// sends it back here.
 // Main checks the one-time code and passes the answer to the app. The private
 // key never leaves the app, so the answer is useless to anything else.
 
@@ -380,8 +381,11 @@ ipcMain.handle("sign-in", (event, publicKey) => {
     });
     server.listen(0, "127.0.0.1", () => {
       port = server.address().port;
+      // The request rides after the "#": a browser never sends that part to a
+      // server, so the one-time code stays on this computer.
       const page = new URL(APP_URL);
-      page.search = new URLSearchParams({ "desktop-signin": "1", pk: publicKey, state, port: String(port) }).toString();
+      page.search = "?desktop-signin=1";
+      page.hash = new URLSearchParams({ pk: publicKey, state, port: String(port) }).toString();
       Promise.resolve(openSignInWindow(page.toString())).catch(() => finish(""));
     });
   });

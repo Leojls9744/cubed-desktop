@@ -34,7 +34,7 @@ The app opens the address in `cubed.url` in `package.json`. Change it there if C
 
 Passkeys and Google sign-in do not work inside an app window, so **Sign in** opens a small browser window (Chrome, Edge or Brave if installed, otherwise a tab in the default browser). Sign in there with Internet Identity and the window closes; the app is signed in.
 
-How it works: the app makes a key pair and keeps the private half. It opens CUBED's sign-in page with the public half and listens on `127.0.0.1` (this computer only) on a random port, with a one-time code. The page signs in, extends the session to the app's key, and sends it back to that address. `main.js` checks the code and passes the session to the app. The session is useless without the private key, which never leaves the app.
+How it works: the app makes a key pair and keeps the private half. It opens CUBED's sign-in page and listens on `127.0.0.1` (this computer only) on a random port, with a one-time code. The public half, the port and the code ride after the `#` of the page's address, which a browser never sends to a server. The page signs in, extends the session to the app's key, and sends it back to that address. `main.js` checks the code and passes the session to the app. The session is useless without the private key, which never leaves the app.
 
 ## Notes
 
