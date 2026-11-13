@@ -73,7 +73,11 @@ jobs:
             echo "### Installers (${{ matrix.os }})"
             echo
             echo '```'
-            ls -l dist/*.exe dist/*.dmg dist/*.AppImage 2>/dev/null | awk '{ printf "%8.1f MB  %s\n", $5 / 1048576, $NF }'
+            for f in dist/*.exe dist/*.dmg dist/*.AppImage; do
+              if [ -f "$f" ]; then
+                echo "$(( $(wc -c < "$f") / 1048576 )) MB  ${f#dist/}"
+              fi
+            done
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
