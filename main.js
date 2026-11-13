@@ -3,9 +3,15 @@
 //   use it as the default app. Files opened from the OS are handed to the app,
 //   and Save writes back to the same file.
 // - After the first launch the app works offline (it caches itself).
+// - Sign-in happens in the user's real browser (passkeys and Google sign-in do
+//   not work inside an app window): see "Sign in through the browser" below.
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
+const { existsSync } = require("node:fs");
+const http = require("node:http");
+const crypto = require("node:crypto");
+const { spawn } = require("node:child_process");
 
 const APP_URL = process.env.CUBED_URL || require("./package.json").cubed.url;
 const EXTENSIONS = new Set(
@@ -112,7 +118,191 @@ ipcMain.on("ready", () => {
   rendererReady = true;
   for (const file of pending.splice(0)) deliver(file);
 });
-ipcMain.handle("save-file", async (_event, file, bytes) => {
+// Only the CUBED app itself may use the bridge, never a page it opened.
+const fromApp = (event) => {
+  try {
+    return !!APP_URL && new URL(event.senderFrame.url).origin === new URL(APP_URL).origin;
+  } catch {
+    return false;
+  }
+};
+ipcMain.handle("save-file", async (event, file, bytes) => {
+  if (!fromApp(event)) throw new Error("Not allowed.");
   if (!writable.has(file)) throw new Error("CUBED can only save files it opened.");
   await fs.writeFile(file, Buffer.from(bytes));
+});
+
+// ---- Sign in through the browser -------------------------------------------
+// The app makes a key pair and gives the public half to main. Main opens a
+// small browser window on the CUBED sign-in page and waits on a loopback
+// address (127.0.0.1, this computer only). The page signs in with Internet
+// Identity, extends the session to the app's key, and sends it back here.
+// Main checks the one-time code and passes the answer to the app. The private
+// key never leaves the app, so the answer is useless to anything else.
+
+const SIGN_IN_MINUTES = 10;
+let attempt = null; // the sign-in in progress: { finish }
+
+/** A Chromium browser that can open a small app-style window, or null. */
+function findBrowser() {
+  const candidates = [];
+  if (process.platform === "win32") {
+    const roots = [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean);
+    for (const exe of ["Google\\Chrome\\Application\\chrome.exe", "Microsoft\\Edge\\Application\\msedge.exe", "BraveSoftware\\Brave-Browser\\Application\\brave.exe"]) {
+      for (const root of roots) candidates.push(path.join(root, exe));
+    }
+  } else if (process.platform === "darwin") {
+    const roots = ["/Applications", path.join(app.getPath("home"), "Applications")];
+    for (const name of ["Google Chrome", "Microsoft Edge", "Brave Browser", "Chromium"]) {
+      for (const root of roots) candidates.push(path.join(root, `${name}.app`, "Contents", "MacOS", name));
+    }
+  } else {
+    const dirs = (process.env.PATH || "").split(":").filter(Boolean);
+    for (const name of ["google-chrome", "google-chrome-stable", "microsoft-edge", "brave-browser", "chromium", "chromium-browser"]) {
+      for (const dir of dirs) candidates.push(path.join(dir, name));
+    }
+  }
+  return candidates.find((file) => existsSync(file)) || null;
+}
+
+/** Open the sign-in page in a small browser window (or a normal tab). */
+function openSignInWindow(url) {
+  const browser = findBrowser();
+  if (!browser) return shell.openExternal(url);
+  const width = 460;
+  const height = 700;
+  const args = [`--app=${url}`, `--window-size=${width},${height}`];
+  if (win) {
+    const area = win.getBounds();
+    const x = Math.round(area.x + (area.width - width) / 2);
+    const y = Math.round(area.y + (area.height - height) / 2);
+    args.push(`--window-position=${Math.max(0, x)},${Math.max(0, y)}`);
+  }
+  try {
+    const child = spawn(browser, args, { detached: true, stdio: "ignore" });
+    child.on("error", () => shell.openExternal(url));
+    child.unref();
+  } catch {
+    return shell.openExternal(url);
+  }
+}
+
+// The loopback page: reads the answer from its address, posts it back to this
+// app, then closes. A nonce keeps any other script from running on it.
+const donePage = (nonce) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CUBED</title>
+<style nonce="${nonce}">
+  html, body { height: 100%; margin: 0; background: #000; color: #fff; font: 600 17px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 24px; }
+  small { display: block; margin-top: 6px; font-weight: 400; font-size: 13px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<p id="status">Signing in…</p>
+<script nonce="${nonce}">
+  const status = document.getElementById("status");
+  const answer = location.hash.slice(1);
+  history.replaceState(null, "", "/done");
+  fetch("/token", { method: "POST", body: answer })
+    .then((reply) => {
+      if (!reply.ok) throw new Error("refused");
+      status.innerHTML = "Signed in<small>You can close this window.</small>";
+      setTimeout(() => window.close(), 700);
+    })
+    .catch(() => {
+      status.innerHTML = "This sign-in has expired<small>Go back to CUBED and choose Sign in again.</small>";
+    });
+</script>
+</body>
+</html>`;
+
+const sameText = (a, b) => {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+};
+
+ipcMain.handle("sign-in", (event, publicKey) => {
+  if (!fromApp(event)) throw new Error("Not allowed.");
+  if (typeof publicKey !== "string" || !/^[A-Za-z0-9_-]{40,400}$/.test(publicKey)) {
+    throw new Error("Sign-in could not start.");
+  }
+  // Choosing Sign in again replaces the attempt in progress.
+  attempt?.finish("");
+
+  return new Promise((resolve, reject) => {
+    const state = crypto.randomBytes(24).toString("base64url");
+    let port = 0;
+    let settled = false;
+    const server = http.createServer((request, response) => {
+      const send = (code, type, body) => {
+        response.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
+        response.end(body);
+      };
+      // Only this computer, by its loopback address, may talk to this server.
+      if (request.headers.host !== `127.0.0.1:${port}`) return send(400, "text/plain", "Bad request");
+      const route = (request.url || "").split("?")[0];
+      if (request.method === "GET" && route === "/done") {
+        const nonce = crypto.randomBytes(16).toString("base64");
+        response.setHeader("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`);
+        return send(200, "text/html; charset=utf-8", donePage(nonce));
+      }
+      if (request.method === "POST" && route === "/token") {
+        let body = "";
+        request.setEncoding("utf8");
+        request.on("data", (chunk) => {
+          body += chunk;
+          if (body.length > 200_000) request.destroy();
+        });
+        request.on("end", () => {
+          try {
+            const answer = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+            if (!sameText(answer.state, state)) return send(403, "text/plain", "Refused");
+            send(204, "text/plain", "");
+            finish(body);
+          } catch {
+            send(400, "text/plain", "Bad request");
+          }
+        });
+        return;
+      }
+      send(404, "text/plain", "Not found");
+    });
+    const timer = setTimeout(() => finish(""), SIGN_IN_MINUTES * 60_000);
+    function finish(answer) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (attempt?.finish === finish) attempt = null;
+      // Let the reply reach the browser before the server goes away.
+      setTimeout(() => {
+        server.close();
+        server.closeAllConnections?.();
+      }, 1500);
+      resolve(answer);
+      if (answer && win) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      }
+    }
+    attempt = { finish };
+    server.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (attempt?.finish === finish) attempt = null;
+      reject(new Error(`Sign-in could not start (${error.code || error.message}).`));
+    });
+    server.listen(0, "127.0.0.1", () => {
+      port = server.address().port;
+      const page = new URL(APP_URL);
+      page.search = new URLSearchParams({ "desktop-signin": "1", pk: publicKey, state, port: String(port) }).toString();
+      Promise.resolve(openSignInWindow(page.toString())).catch(() => finish(""));
+    });
+  });
 });
