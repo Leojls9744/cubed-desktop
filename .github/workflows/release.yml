@@ -36,7 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # macos-15-intel: GitHub's Apple Silicon runners are short on capacity
+        # and jobs time out waiting for one. The Intel runner builds both the
+        # arm64 and x64 .dmg files.
+        os: [windows-latest, macos-15-intel, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
