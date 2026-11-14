@@ -8,7 +8,7 @@
 // - Windows and Linux update themselves from this repo's GitHub releases. Macs
 //   cannot (that needs a paid Apple certificate), so there the app is told when
 //   a newer installer exists and shows a button: see "Updates" below.
-const { app, BrowserWindow, ipcMain, net, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, net, screen, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { existsSync } = require("node:fs");
@@ -277,6 +277,12 @@ function findBrowser() {
   return candidates.find((file) => existsSync(file)) || null;
 }
 
+/** Middle of the app's window (or of the screen), where the sign-in card opens. */
+function centerOfApp() {
+  const box = win && !win.isDestroyed() && !win.isMinimized() ? win.getBounds() : screen.getPrimaryDisplay().workArea;
+  return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+}
+
 /** Open the sign-in page in a small browser window (or a normal tab). */
 function openSignInWindow(url) {
   const browser = findBrowser();
@@ -284,12 +290,10 @@ function openSignInWindow(url) {
   const width = 460;
   const height = 700;
   const args = [`--app=${url}`, `--window-size=${width},${height}`];
-  if (win) {
-    const area = win.getBounds();
-    const x = Math.round(area.x + (area.width - width) / 2);
-    const y = Math.round(area.y + (area.height - height) / 2);
-    args.push(`--window-position=${Math.max(0, x)},${Math.max(0, y)}`);
-  }
+  // A browser that is already running often ignores these; the page moves and
+  // sizes itself from the "at" in its address as well.
+  const middle = centerOfApp();
+  args.push(`--window-position=${Math.max(0, Math.round(middle.x - width / 2))},${Math.max(0, Math.round(middle.y - height / 2))}`);
   try {
     const child = spawn(browser, args, { detached: true, stdio: "ignore" });
     child.on("error", () => shell.openExternal(url));
@@ -416,7 +420,8 @@ ipcMain.handle("sign-in", (event, publicKey) => {
       // server, so the one-time code stays on this computer.
       const page = new URL(APP_URL);
       page.search = "?desktop-signin=1";
-      page.hash = new URLSearchParams({ pk: publicKey, state, port: String(port) }).toString();
+      const middle = centerOfApp();
+      page.hash = new URLSearchParams({ pk: publicKey, state, port: String(port), at: `${middle.x},${middle.y}` }).toString();
       Promise.resolve(openSignInWindow(page.toString())).catch(() => finish(""));
     });
   });
