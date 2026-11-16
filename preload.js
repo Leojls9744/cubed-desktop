@@ -4,6 +4,14 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("cubedDesktop", {
   onOpenFile: (open) => ipcRenderer.on("open-file", (_event, file) => open(file)),
   ready: () => ipcRenderer.send("ready"),
+  // The window is being closed: the app may ask about unsaved edits, then
+  // answers with closeNow().
+  onBeforeClose: (ask) =>
+    ipcRenderer.on("before-close", () => {
+      ipcRenderer.send("close-ack"); // the app is awake and will answer
+      ask();
+    }),
+  closeNow: () => ipcRenderer.send("close-now"),
   saveFile: (path, bytes) => ipcRenderer.invoke("save-file", path, bytes),
   // Sign in through the browser: resolves with the session for this app's key,
   // or "" if the window was closed or the attempt was replaced.

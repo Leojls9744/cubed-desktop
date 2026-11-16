@@ -25,6 +25,9 @@ const SIGN_IN = ["https://id.ai", "https://identity.ic0.app", "https://identity.
 
 let win = null;
 let rendererReady = false;
+// Set once the app has said it is fine to close (nothing unsaved, or the user chose).
+let forceClose = false;
+let closeTimer = null;
 const pending = [];
 // Only files the user opened through the OS in this session may be written.
 const writable = new Set();
@@ -101,10 +104,28 @@ function createWindow() {
       shell.openExternal(url);
     }
   });
-  win.webContents.on("did-start-loading", () => {
-    rendererReady = false;
+  // Not ready again until the page itself is loaded afresh. (This used to be
+  // "did-start-loading", which also fires for things inside the page, and then
+  // files opened later waited forever for a "ready" that was never sent again.)
+  win.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) rendererReady = false;
+  });
+  // Closing the window: the app first gets to ask about unsaved edits.
+  win.on("close", (event) => {
+    if (forceClose || !rendererReady || !win) return;
+    event.preventDefault();
+    win.webContents.send("before-close");
+    // If the page never answers (it hung), do not leave the window stuck.
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      forceClose = true;
+      win?.close();
+    }, 5000);
   });
   win.on("closed", () => {
+    clearTimeout(closeTimer);
+    forceClose = false;
+    rendererReady = false;
     win = null;
   });
 }
@@ -149,6 +170,12 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
+ipcMain.on("close-ack", () => clearTimeout(closeTimer));
+ipcMain.on("close-now", (event) => {
+  if (!win || event.sender !== win.webContents) return;
+  forceClose = true;
+  win.close();
+});
 ipcMain.on("ready", () => {
   rendererReady = true;
   for (const file of pending.splice(0)) deliver(file);
