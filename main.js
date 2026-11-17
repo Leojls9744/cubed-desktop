@@ -8,7 +8,7 @@
 // - Windows and Linux update themselves from this repo's GitHub releases. Macs
 //   cannot (that needs a paid Apple certificate), so there the app is told when
 //   a newer installer exists and shows a button: see "Updates" below.
-const { app, BrowserWindow, ipcMain, net, screen, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, net, screen, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { existsSync } = require("node:fs");
@@ -192,6 +192,59 @@ ipcMain.handle("save-file", async (event, file, bytes) => {
   if (!fromApp(event)) throw new Error("Not allowed.");
   if (!writable.has(file)) throw new Error("CUBED can only save files it opened.");
   await fs.writeFile(file, Buffer.from(bytes));
+});
+
+// ---- Printing ---------------------------------------------------------------
+// The app shows its own preview and print options, so the page is printed (or
+// saved as a PDF) here without the system's print card.
+/** "1-3, 5" -> [{from: 0, to: 2}, {from: 4, to: 4}] (Electron counts from 0). */
+function pageRanges(text) {
+  const out = [];
+  for (const part of String(text || "").split(",")) {
+    const m = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!m) continue;
+    const from = Number(m[1]);
+    const to = m[2] ? Number(m[2]) : from;
+    if (from >= 1 && to >= from) out.push({ from: from - 1, to: to - 1 });
+  }
+  return out;
+}
+ipcMain.handle("printers", async (event) => {
+  if (!fromApp(event)) throw new Error("Not allowed.");
+  const list = await event.sender.getPrintersAsync();
+  return list.map((p) => ({ name: p.name, label: p.displayName || p.name, isDefault: !!p.isDefault }));
+});
+ipcMain.handle("print", (event, job) => {
+  if (!fromApp(event)) throw new Error("Not allowed.");
+  const ranges = pageRanges(job && job.pages);
+  const options = {
+    silent: true,
+    printBackground: true,
+    copies: Math.max(1, Math.min(99, Number(job && job.copies) || 1)),
+  };
+  if (job && job.printer) options.deviceName = String(job.printer);
+  if (ranges.length) options.pageRanges = ranges;
+  return new Promise((resolve) => {
+    event.sender.print(options, (ok, reason) => resolve({ ok, reason: ok ? "" : reason || "Could not print" }));
+  });
+});
+ipcMain.handle("save-pdf", async (event, job) => {
+  if (!fromApp(event)) throw new Error("Not allowed.");
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const base = String((job && job.name) || "Document").replace(/[\\/:*?"<>|]+/g, " ").replace(/\.[A-Za-z0-9]{1,5}$/, "").trim() || "Document";
+  const pick = await dialog.showSaveDialog(win, {
+    defaultPath: `${base}.pdf`,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (pick.canceled || !pick.filePath) return { ok: false, reason: "" };
+  const ranges = String((job && job.pages) || "").replace(/[^0-9,\- ]/g, "");
+  const data = await event.sender.printToPDF({
+    preferCSSPageSize: true,
+    printBackground: true,
+    ...(ranges.trim() ? { pageRanges: ranges.trim() } : {}),
+  });
+  await fs.writeFile(pick.filePath, data);
+  return { ok: true, reason: "", path: pick.filePath };
 });
 
 // ---- Updates ----------------------------------------------------------------
